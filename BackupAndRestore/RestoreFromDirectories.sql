@@ -3,7 +3,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- =============================================
--- Author:		Mohsen Sayadian
+-- Author: Mohsen Sayadian
 -- Create date: 2022-06-05
 -- Description:	Restore From Directories
 -- =============================================
@@ -11,7 +11,6 @@ CREATE PROCEDURE usp_RestoreFromDirectories
 	@DBName sysname,
 	@RestorePointTime Datetime,
 	@BackupPath NVARCHAR(2000),
-
 	@RestoreDBName sysname,
 	@RestoreDataPath NVARCHAR(2000),
 	@RestoreLogPath NVARCHAR(2000),
@@ -25,8 +24,6 @@ BEGIN
 	DECLARE @Cmd NVARCHAR(2000) 
 	DECLARE @FileList TABLE (Id int NOT NULL IDENTITY(1,1),BackupFile NVARCHAR(2000)) 
 
-
-
 	SET @Cmd = 'DIR /a:-D /S /b "' + @backupPath + '"'
 
 	INSERT INTO @FileList(BackupFile) 
@@ -37,7 +34,6 @@ BEGIN
 	DECLARE @BackupInfo TABLE  (Id INT NOT NULL IDENTITY(1, 1), BackupName NVARCHAR(128), BackupDescription NVARCHAR(255), BackupType SMALLINT, ExpirationDate DATETIME, Compressed BIT, Position SMALLINT, DeviceType TINYINT, UserName NVARCHAR(128), ServerName NVARCHAR(128), DatabaseName NVARCHAR(128), DatabaseVersion INT, DatabaseCreationDate DATETIME, BackupSize NUMERIC(20, 0), FirstLSN NUMERIC(25, 0), LastLSN NUMERIC(25, 0), CheckpointLSN NUMERIC(25, 0), DatabaseBackupLSN NUMERIC(25, 0), BackupStartDate DATETIME, BackupFinishDate DATETIME, SortOrder SMALLINT, [CodePage] SMALLINT, UnicodeLocaleId INT, UnicodeComparisonStyle INT, CompatibilityLevel TINYINT, SoftwareVendorId INT, SoftwareVersionMajor INT, SoftwareVersionMinor INT, SoftwareVersionBuild INT, MachineName NVARCHAR(128), Flags INT, BindingId UNIQUEIDENTIFIER, RecoveryForkId UNIQUEIDENTIFIER, Collation NVARCHAR(128), FamilyGUID UNIQUEIDENTIFIER, HasBulkLoggedData BIT, IsSnapshot BIT, IsReadOnly BIT, IsSingleUser BIT, HasBackupChecksums BIT, IsDamaged BIT, BeginsLogChain BIT, HasIncompleteMetaData BIT, IsForceOffline BIT, IsCopyOnly BIT, 
 		FirstRecoveryForkID UNIQUEIDENTIFIER, ForkPointLSN NUMERIC(25, 0), RecoveryModel NVARCHAR(60), DifferentialBaseLSN NUMERIC(25, 0), DifferentialBaseGUID UNIQUEIDENTIFIER, BackupTypeDescription NVARCHAR(60), BackupSetGUID UNIQUEIDENTIFIER, CompressedBackupSize BIGINT, Containment TINYINT, KeyAlgorithm NVARCHAR(32), EncryptorThumbprint VARBINARY(20), EncryptorType NVARCHAR(32), BackupFile NVARCHAR(2000))
 	
-
 	DECLARE @Index int = (SELECT COUNT(*) FROM @FileList);
 	DECLARE @FilePath NVARCHAR(2000) ;
 	DECLARE @SqlHeader NVARCHAR(4000)
@@ -65,9 +61,7 @@ BEGIN
 		SET @Index = @Index - 1
 	END
 
-
 	IF(@Execute = 1 AND @SingleUser = 1) EXEC('ALTER DATABASE ['+@DBName+'] SET SINGLE_USER WITH ROLLBACK IMMEDIATE');
-
 
 	Print CHAR(13) + '--- Restore List -------------------------------------------------------------------'
 
