@@ -6,7 +6,17 @@ GO
 -- Author: Mohsen Sayadian
 -- Create date: 2022-06-05
 -- Description:	Restore From Directories
+-- Version : 1.00
 -- =============================================
+
+IF EXISTS(SELECT 1 FROM sys.procedures 
+          WHERE Name = 'usp_RestoreFromDirectories')
+BEGIN
+    DROP PROCEDURE dbo.usp_RestoreFromDirectories
+END
+
+GO
+
 CREATE PROCEDURE usp_RestoreFromDirectories
 	@DBName sysname,
 	@RestorePointTime Datetime,
