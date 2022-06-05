@@ -17,7 +17,15 @@ END
 
 GO
 
-CREATE PROCEDURE usp_RestoreFromDirectories
+USE [master]
+GO
+/****** Object:  StoredProcedure [dbo].[usp_RestoreFromDirectories]    Script Date: 6/5/2022 1:35:05 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[usp_RestoreFromDirectories]
 	@DBName sysname,
 	@RestorePointTime Datetime,
 	@BackupPath NVARCHAR(2000),
@@ -78,11 +86,16 @@ BEGIN
 	--Firts Full Backup
 	DECLARE @FisrtFullBackupDateTime Datetime 
 	DECLARE @BackupSetGUID UNIQUEIDENTIFIER
-	DECLARE @BackupFinishDate Datetime 
 
-	SELECT TOP(1) @FisrtFullBackupDateTime = BackupFinishDate ,@BackupSetGUID = BackupSetGUID  FROM @BackupInfo 
-	WHERE BackupType = 1 AND DatabaseName = @DBName AND BackupFinishDate <= @RestorePointTime AND BackupTypeDescription IN ('DATABASE','DATABASE DIFFERENTIAL','TRANSACTION LOG')
-	ORDER BY BackupFinishDate DESC
+	SELECT TOP(1) @FisrtFullBackupDateTime = BackupStartDate ,@BackupSetGUID = BackupSetGUID  FROM @BackupInfo 
+	WHERE BackupType = 1 AND DatabaseName = @DBName AND BackupFinishDate <= @RestorePointTime AND BackupTypeDescription IN ('DATABASE')
+	ORDER BY BackupStartDate DESC
+
+	DELETE  FROM @BackupInfo 
+	WHERE DatabaseName = @DBName 
+	AND BackupFinishDate <= @RestorePointTime 
+	AND BackupTypeDescription IN ('DATABASE DIFFERENTIAL','TRANSACTION LOG')
+	AND  BackupStartDate = @FisrtFullBackupDateTime
 
 	DECLARE @BackupFile Nvarchar(2000) = ''
 	DECLARE @BackupTypeDescription varchar(50) = ''
@@ -107,7 +120,7 @@ BEGIN
 	FROM @BackupFiles
 	DELETE @BackupFiles
 
-	SET @SqlBackupMove = @SqlBackupMove + ' NORECOVERY ,NOUNLOAD,  STATS = 1 {Parameters} ' 
+	SET @SqlBackupMove = @SqlBackupMove + ' NORECOVERY ,NOUNLOAD,  STATS = 20 {Parameters} ' 
 	SET @SqlBackupMove = REPLACE(@SqlBackupMove ,'{Parameters}' , @RestoreExtraParmeters)
 
 	Print @SqlBackupHeader + @SqlBackupMove
@@ -115,28 +128,34 @@ BEGIN
 
 	--Last Diff Backup and log chain
 
-	SELECT TOP(1) @FisrtFullBackupDateTime = BackupFinishDate  FROM @BackupInfo 
+	SELECT TOP(1) @FisrtFullBackupDateTime = BackupStartDate  FROM @BackupInfo 
 	WHERE BackupType = 5 
 	AND DatabaseName = @DBName 
 	AND BackupFinishDate <= @RestorePointTime 
-	AND BackupFinishDate >= @FisrtFullBackupDateTime
+	AND BackupStartDate >= @FisrtFullBackupDateTime
 	AND BackupTypeDescription IN ('DATABASE DIFFERENTIAL')
-	ORDER BY BackupFinishDate DESC
+	ORDER BY BackupStartDate DESC
+
+	DELETE FROM @BackupInfo 
+	WHERE DatabaseName = @DBName 
+	AND BackupFinishDate <= @RestorePointTime 
+	AND BackupTypeDescription IN ('TRANSACTION LOG')
+	AND BackupStartDate = @FisrtFullBackupDateTime
 
 
 	DECLARE contact_cursor CURSOR FOR  
-	SELECT BackupSetGUID ,BackupFinishDate    
+	SELECT BackupSetGUID     
 	FROM @BackupInfo 
 	WHERE BackupFinishDate <= @RestorePointTime 
 		AND BackupTypeDescription IN ('DATABASE DIFFERENTIAL','TRANSACTION LOG')
-		AND BackupFinishDate >= @FisrtFullBackupDateTime
+		AND BackupStartDate >= @FisrtFullBackupDateTime
 		AND DatabaseName = @DBName
-	GROUP BY BackupFinishDate , BackupSetGUID
-	ORDER BY BackupFinishDate, BackupSetGUID  
+	GROUP BY BackupStartDate ,BackupSetGUID
+	ORDER BY BackupStartDate ,BackupSetGUID  
   
 	OPEN contact_cursor;  
   
-	FETCH NEXT FROM contact_cursor INTO @BackupSetGUID ,@BackupFinishDate;  
+	FETCH NEXT FROM contact_cursor INTO @BackupSetGUID ;  
  
 	WHILE @@FETCH_STATUS = 0  
 	BEGIN  
@@ -164,13 +183,13 @@ BEGIN
 		FROM @BackupFiles
 		DELETE @BackupFiles
 
-		SET @SqlBackupMove = @SqlBackupMove + ' NORECOVERY ,NOUNLOAD,  STATS = 1 {Parameters} ' 
+		SET @SqlBackupMove = @SqlBackupMove + ' NORECOVERY ,NOUNLOAD,  STATS = 20 {Parameters} ' 
 		SET @SqlBackupMove = REPLACE(@SqlBackupMove ,'{Parameters}' , @RestoreExtraParmeters)
 
 		Print @SqlBackupHeader + @SqlBackupMove
 		IF(@Execute = 1) EXEC( @SqlBackupHeader + @SqlBackupMove)
 
-	   FETCH NEXT FROM contact_cursor INTO @BackupSetGUID,@BackupFinishDate;  
+	   FETCH NEXT FROM contact_cursor INTO @BackupSetGUID;  
 	END  
   
 	CLOSE contact_cursor;  
