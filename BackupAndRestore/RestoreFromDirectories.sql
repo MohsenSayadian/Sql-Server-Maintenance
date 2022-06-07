@@ -63,7 +63,7 @@ BEGIN
 	SET FileDate = SUBSTRING(BackupFile,0,CHARINDEX('?',BackupFile)),
 	BackupFile = SUBSTRING(BackupFile,CHARINDEX('?',BackupFile) + 1,LEN(BackupFile))
 
-	DELETE @FileList WHERE BackupFile IS NULL OR FileDate > @RestorePointTime OR FileDate < @StartSearch
+	DELETE @FileList WHERE BackupFile IS NULL OR (@RestorePointTime < FileDate OR FileDate < @StartSearch)
 
 	DECLARE @BackupFiles TABLE ( [LogicalName] NVARCHAR(128), [PhysicalName] NVARCHAR(260), [Type] CHAR(1), [FileGroupName] NVARCHAR(128), [Size] NUMERIC(20, 0), [MaxSize] NUMERIC(20, 0), [FileID] BIGINT, [CreateLSN] NUMERIC(25, 0), [DropLSN] NUMERIC(25, 0), [UniqueID] UNIQUEIDENTIFIER, [ReadOnlyLSN] NUMERIC(25, 0), [ReadWriteLSN] NUMERIC(25, 0), [BackupSizeInBytes] BIGINT, [SourceBlockSize] INT, [FileGroupID] INT, [LogGroupGUID] UNIQUEIDENTIFIER, [DifferentialBaseLSN] NUMERIC(25, 0), [DifferentialBaseGUID] UNIQUEIDENTIFIER, [IsReadOnly] BIT, [IsPresent] BIT, [TDEThumbprint] VARBINARY(32), [SnapshotURL] NVARCHAR(360))
 
