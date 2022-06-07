@@ -27,6 +27,7 @@ GO
 
 CREATE PROCEDURE [dbo].[usp_RestoreFromDirectories]
 	@DBName sysname,
+	@StartSearch Datetime = NULL,
 	@RestorePointTime Datetime,
 	@BackupPath NVARCHAR(2000),
 	@RestoreDBName sysname,
@@ -42,6 +43,7 @@ BEGIN
 	DECLARE @Cmd NVARCHAR(2000) 
 	DECLARE @FileList TABLE (Id int NOT NULL IDENTITY(1,1),FileDate Datetime,BackupFile NVARCHAR(2000)) 
 	
+	IF(@StartSearch IS NULL OR @StartSearch = '') SET @StartSearch = '1900-01-01 00:00:00.000'
 	SET @RestoreDataPath = @RestoreDataPath + CASE WHEN RIGHT(@RestoreDataPath,1) = '\' THEN '' ELSE '\' END;
 	SET @RestoreLogPath = @RestoreLogPath + CASE WHEN RIGHT(@RestoreLogPath,1) = '\' THEN '' ELSE '\' END;
 
@@ -61,7 +63,7 @@ BEGIN
 	SET FileDate = SUBSTRING(BackupFile,0,CHARINDEX('?',BackupFile)),
 	BackupFile = SUBSTRING(BackupFile,CHARINDEX('?',BackupFile) + 1,LEN(BackupFile))
 
-	DELETE @FileList WHERE BackupFile IS NULL OR FileDate > @RestorePointTime
+	DELETE @FileList WHERE BackupFile IS NULL OR FileDate > @RestorePointTime OR FileDate < @StartSearch
 
 	DECLARE @BackupFiles TABLE ( [LogicalName] NVARCHAR(128), [PhysicalName] NVARCHAR(260), [Type] CHAR(1), [FileGroupName] NVARCHAR(128), [Size] NUMERIC(20, 0), [MaxSize] NUMERIC(20, 0), [FileID] BIGINT, [CreateLSN] NUMERIC(25, 0), [DropLSN] NUMERIC(25, 0), [UniqueID] UNIQUEIDENTIFIER, [ReadOnlyLSN] NUMERIC(25, 0), [ReadWriteLSN] NUMERIC(25, 0), [BackupSizeInBytes] BIGINT, [SourceBlockSize] INT, [FileGroupID] INT, [LogGroupGUID] UNIQUEIDENTIFIER, [DifferentialBaseLSN] NUMERIC(25, 0), [DifferentialBaseGUID] UNIQUEIDENTIFIER, [IsReadOnly] BIT, [IsPresent] BIT, [TDEThumbprint] VARBINARY(32), [SnapshotURL] NVARCHAR(360))
 
