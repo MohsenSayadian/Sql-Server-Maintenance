@@ -40,14 +40,28 @@ BEGIN
 	SET NOCOUNT ON;
 
 	DECLARE @Cmd NVARCHAR(2000) 
-	DECLARE @FileList TABLE (Id int NOT NULL IDENTITY(1,1),BackupFile NVARCHAR(2000)) 
+	DECLARE @FileList TABLE (Id int NOT NULL IDENTITY(1,1),FileDate Datetime,BackupFile NVARCHAR(2000)) 
+	
+	SET @RestoreDataPath = @RestoreDataPath + CASE WHEN RIGHT(@RestoreDataPath,1) = '\' THEN '' ELSE '\' END;
+	SET @RestoreLogPath = @RestoreLogPath + CASE WHEN RIGHT(@RestoreLogPath,1) = '\' THEN '' ELSE '\' END;
 
-	SET @Cmd = 'DIR /a:-D /S /b "' + @backupPath + '"'
+	SET @Cmd = 'MKDIR "' + @RestoreDataPath + '"'
+	EXEC master.sys.xp_cmdshell @cmd ,no_output
+
+	SET @Cmd = 'MKDIR "' + @RestoreLogPath + '"'
+	EXEC master.sys.xp_cmdshell @cmd ,no_output
+
+
+	SET @Cmd ='for /f "eol=: delims=" %F in (''DIR /a:-D /S /b ' + @backupPath + ''') do @echo %~tF?%F' 
 
 	INSERT INTO @FileList(BackupFile) 
 	EXEC master.sys.xp_cmdshell @cmd 
 	
-	DELETE @FileList WHERE BackupFile IS NULL
+	UPDATE @FileList
+	SET FileDate = SUBSTRING(BackupFile,0,CHARINDEX('?',BackupFile)),
+	BackupFile = SUBSTRING(BackupFile,CHARINDEX('?',BackupFile) + 1,LEN(BackupFile))
+
+	DELETE @FileList WHERE BackupFile IS NULL OR FileDate > @RestorePointTime
 
 	DECLARE @BackupFiles TABLE ( [LogicalName] NVARCHAR(128), [PhysicalName] NVARCHAR(260), [Type] CHAR(1), [FileGroupName] NVARCHAR(128), [Size] NUMERIC(20, 0), [MaxSize] NUMERIC(20, 0), [FileID] BIGINT, [CreateLSN] NUMERIC(25, 0), [DropLSN] NUMERIC(25, 0), [UniqueID] UNIQUEIDENTIFIER, [ReadOnlyLSN] NUMERIC(25, 0), [ReadWriteLSN] NUMERIC(25, 0), [BackupSizeInBytes] BIGINT, [SourceBlockSize] INT, [FileGroupID] INT, [LogGroupGUID] UNIQUEIDENTIFIER, [DifferentialBaseLSN] NUMERIC(25, 0), [DifferentialBaseGUID] UNIQUEIDENTIFIER, [IsReadOnly] BIT, [IsPresent] BIT, [TDEThumbprint] VARBINARY(32), [SnapshotURL] NVARCHAR(360))
 
@@ -81,15 +95,18 @@ BEGIN
 		SET @Index = @Index - 1
 	END
 
+	IF(NOT EXISTS(SELECT TOP(1) * FROM @BackupInfo)) RETURN;
+
 	IF(@Execute = 1 AND @SingleUser = 1) EXEC('ALTER DATABASE ['+@DBName+'] SET SINGLE_USER WITH ROLLBACK IMMEDIATE');
 
 	Print CHAR(13) + '--- Restore List -------------------------------------------------------------------'
 
 	--Firts Full Backup
 	DECLARE @FisrtFullBackupDateTime Datetime 
+	DECLARE @BackupEndDateTime Datetime 
 	DECLARE @BackupSetGUID UNIQUEIDENTIFIER
 
-	SELECT TOP(1) @FisrtFullBackupDateTime = BackupStartDate ,@BackupSetGUID = BackupSetGUID  FROM @BackupInfo 
+	SELECT TOP(1) @FisrtFullBackupDateTime = BackupStartDate, @BackupEndDateTime = BackupFinishDate ,@BackupSetGUID = BackupSetGUID  FROM @BackupInfo 
 	WHERE BackupType = 1 AND DatabaseName = @DBName AND BackupFinishDate <= @RestorePointTime AND BackupTypeDescription IN ('DATABASE')
 	ORDER BY BackupStartDate DESC
 
@@ -97,7 +114,7 @@ BEGIN
 	WHERE DatabaseName = @DBName 
 	AND BackupFinishDate <= @RestorePointTime 
 	AND BackupTypeDescription IN ('DATABASE DIFFERENTIAL','TRANSACTION LOG')
-	AND  BackupStartDate = @FisrtFullBackupDateTime
+	AND  BackupStartDate <= @BackupEndDateTime
 
 	DECLARE @BackupFile Nvarchar(2000) = ''
 	DECLARE @BackupTypeDescription varchar(50) = ''
@@ -130,7 +147,7 @@ BEGIN
 
 	--Last Diff Backup and log chain
 
-	SELECT TOP(1) @FisrtFullBackupDateTime = BackupStartDate  FROM @BackupInfo 
+	SELECT TOP(1) @FisrtFullBackupDateTime = BackupStartDate , @BackupEndDateTime = BackupFinishDate  FROM @BackupInfo 
 	WHERE BackupType = 5 
 	AND DatabaseName = @DBName 
 	AND BackupFinishDate <= @RestorePointTime 
@@ -142,7 +159,7 @@ BEGIN
 	WHERE DatabaseName = @DBName 
 	AND BackupFinishDate <= @RestorePointTime 
 	AND BackupTypeDescription IN ('TRANSACTION LOG')
-	AND BackupStartDate = @FisrtFullBackupDateTime
+	AND BackupStartDate <= @BackupEndDateTime
 
 
 	DECLARE contact_cursor CURSOR FOR  
