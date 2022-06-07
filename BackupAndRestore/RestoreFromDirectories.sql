@@ -1,3 +1,5 @@
+USE [master]
+GO
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -41,7 +43,7 @@ BEGIN
 	SET NOCOUNT ON;
 
 	DECLARE @Cmd NVARCHAR(2000) 
-	DECLARE @FileList TABLE (Id int NOT NULL IDENTITY(1,1),FileDate Datetime,BackupFile NVARCHAR(2000)) 
+	CREATE TABLE #FileList (FileDate Datetime,BackupFile NVARCHAR(2000)) 
 	
 	IF(@StartSearch IS NULL OR @StartSearch = '') SET @StartSearch = '1900-01-01 00:00:00.000'
 	SET @RestoreDataPath = @RestoreDataPath + CASE WHEN RIGHT(@RestoreDataPath,1) = '\' THEN '' ELSE '\' END;
@@ -56,29 +58,35 @@ BEGIN
 
 	SET @Cmd ='for /f "eol=: delims=" %F in (''DIR /a:-D /S /b ' + @backupPath + ''') do @echo %~tF?%F' 
 
-	INSERT INTO @FileList(BackupFile) 
+
+	INSERT INTO #FileList(BackupFile) 
 	EXEC master.sys.xp_cmdshell @cmd 
 	
-	UPDATE @FileList
+	UPDATE #FileList
 	SET FileDate = SUBSTRING(BackupFile,0,CHARINDEX('?',BackupFile)),
 	BackupFile = SUBSTRING(BackupFile,CHARINDEX('?',BackupFile) + 1,LEN(BackupFile))
 
-	DELETE @FileList WHERE BackupFile IS NULL OR (@RestorePointTime < FileDate OR FileDate < @StartSearch)
+	DELETE #FileList WHERE BackupFile IS NULL OR (@RestorePointTime < FileDate OR FileDate < @StartSearch)
+
+	Alter Table #FileList Add Id Int Identity(1, 1)
 
 	DECLARE @BackupFiles TABLE ( [LogicalName] NVARCHAR(128), [PhysicalName] NVARCHAR(260), [Type] CHAR(1), [FileGroupName] NVARCHAR(128), [Size] NUMERIC(20, 0), [MaxSize] NUMERIC(20, 0), [FileID] BIGINT, [CreateLSN] NUMERIC(25, 0), [DropLSN] NUMERIC(25, 0), [UniqueID] UNIQUEIDENTIFIER, [ReadOnlyLSN] NUMERIC(25, 0), [ReadWriteLSN] NUMERIC(25, 0), [BackupSizeInBytes] BIGINT, [SourceBlockSize] INT, [FileGroupID] INT, [LogGroupGUID] UNIQUEIDENTIFIER, [DifferentialBaseLSN] NUMERIC(25, 0), [DifferentialBaseGUID] UNIQUEIDENTIFIER, [IsReadOnly] BIT, [IsPresent] BIT, [TDEThumbprint] VARBINARY(32), [SnapshotURL] NVARCHAR(360))
 
 	DECLARE @BackupInfo TABLE  (Id INT NOT NULL IDENTITY(1, 1), BackupName NVARCHAR(128), BackupDescription NVARCHAR(255), BackupType SMALLINT, ExpirationDate DATETIME, Compressed BIT, Position SMALLINT, DeviceType TINYINT, UserName NVARCHAR(128), ServerName NVARCHAR(128), DatabaseName NVARCHAR(128), DatabaseVersion INT, DatabaseCreationDate DATETIME, BackupSize NUMERIC(20, 0), FirstLSN NUMERIC(25, 0), LastLSN NUMERIC(25, 0), CheckpointLSN NUMERIC(25, 0), DatabaseBackupLSN NUMERIC(25, 0), BackupStartDate DATETIME, BackupFinishDate DATETIME, SortOrder SMALLINT, [CodePage] SMALLINT, UnicodeLocaleId INT, UnicodeComparisonStyle INT, CompatibilityLevel TINYINT, SoftwareVendorId INT, SoftwareVersionMajor INT, SoftwareVersionMinor INT, SoftwareVersionBuild INT, MachineName NVARCHAR(128), Flags INT, BindingId UNIQUEIDENTIFIER, RecoveryForkId UNIQUEIDENTIFIER, Collation NVARCHAR(128), FamilyGUID UNIQUEIDENTIFIER, HasBulkLoggedData BIT, IsSnapshot BIT, IsReadOnly BIT, IsSingleUser BIT, HasBackupChecksums BIT, IsDamaged BIT, BeginsLogChain BIT, HasIncompleteMetaData BIT, IsForceOffline BIT, IsCopyOnly BIT, 
 		FirstRecoveryForkID UNIQUEIDENTIFIER, ForkPointLSN NUMERIC(25, 0), RecoveryModel NVARCHAR(60), DifferentialBaseLSN NUMERIC(25, 0), DifferentialBaseGUID UNIQUEIDENTIFIER, BackupTypeDescription NVARCHAR(60), BackupSetGUID UNIQUEIDENTIFIER, CompressedBackupSize BIGINT, Containment TINYINT, KeyAlgorithm NVARCHAR(32), EncryptorThumbprint VARBINARY(20), EncryptorType NVARCHAR(32), BackupFile NVARCHAR(2000))
 	
-	DECLARE @Index int = (SELECT COUNT(*) FROM @FileList);
+
+	DECLARE @Records int = (SELECT COUNT(*) FROM #FileList);
+	DECLARE @Index int = 1 ;
+	DECLARE @Percentage int = 1 ;
 	DECLARE @FilePath NVARCHAR(2000) ;
 	DECLARE @SqlHeader NVARCHAR(4000)
 	
-	WHILE (@Index > 0)
+	WHILE ( @Index <= @Records )
 	BEGIN
 		 BEGIN TRY
 			
-			SET @FilePath = (SELECT BackupFile FROM @FileList WHERE Id = @Index)
+			SET @FilePath = (SELECT BackupFile FROM #FileList WHERE Id = @Index)
 			SET @SqlHeader = N'RESTORE HEADERONLY FROM DISK = ''' + @FilePath + ''''
 			
 			INSERT INTO @BackupInfo (BackupName, BackupDescription, BackupType, ExpirationDate, Compressed, Position, DeviceType, UserName, ServerName, DatabaseName, DatabaseVersion, DatabaseCreationDate, BackupSize, FirstLSN, LastLSN, CheckpointLSN, DatabaseBackupLSN, BackupStartDate, BackupFinishDate, SortOrder, [CodePage], UnicodeLocaleId, UnicodeComparisonStyle, CompatibilityLevel, SoftwareVendorId, SoftwareVersionMajor, SoftwareVersionMinor, SoftwareVersionBuild, MachineName, Flags, BindingId, RecoveryForkId, Collation, FamilyGUID, HasBulkLoggedData, IsSnapshot, IsReadOnly, IsSingleUser, HasBackupChecksums, IsDamaged, BeginsLogChain, HasIncompleteMetaData, IsForceOffline, IsCopyOnly, FirstRecoveryForkID, ForkPointLSN, RecoveryModel, DifferentialBaseLSN, DifferentialBaseGUID, BackupTypeDescription, BackupSetGUID, CompressedBackupSize, Containment, KeyAlgorithm, EncryptorThumbprint, EncryptorType)
@@ -89,15 +97,19 @@ BEGIN
 		END TRY
 		BEGIN CATCH
 			
-			SET @SqlHeader = (SELECT BackupFile FROM @FileList WHERE Id = @Index)
+			SET @SqlHeader = (SELECT BackupFile FROM #FileList WHERE Id = @Index)
 			Print '-- Error File > ' + @SqlHeader
 
-		END CATCH
+		END CATCH		
 
-		SET @Index = @Index - 1
+		SET @Index = @Index + 1
 	END
 
-	IF(NOT EXISTS(SELECT TOP(1) * FROM @BackupInfo)) RETURN;
+	IF(NOT EXISTS(SELECT TOP(1) * FROM @BackupInfo)) 
+	BEGIN
+		PRINT '--> File or data not found.'
+		RETURN;
+	END
 
 	IF(@Execute = 1 AND @SingleUser = 1) EXEC('ALTER DATABASE ['+@DBName+'] SET SINGLE_USER WITH ROLLBACK IMMEDIATE');
 
