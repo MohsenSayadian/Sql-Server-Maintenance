@@ -8,7 +8,7 @@ GO
 -- Author: Mohsen Sayadian
 -- Create date: 2022-06-05
 -- Description:	Restore From Directories
--- Version : 1.03
+-- Version : 1.05
 -- =============================================
 
 IF EXISTS(SELECT 1 FROM sys.procedures 
